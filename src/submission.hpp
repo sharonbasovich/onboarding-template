@@ -93,16 +93,28 @@ void apply_stencil(const Grid &old_grid, Grid &new_grid)
   double *new_base = new_grid.base();
   std::size_t rows = old_grid.rows();
   std::size_t cols = old_grid.cols();
+
+  const double *curr = old_base + cols;
+  const double *prev = old_base;
+  const double *next = old_base + 2 * cols;
+  double *new_cell = new_base + cols;
+
   for (std::size_t i = 1; i < rows - 1; i++)
   {
-    const double *curr = old_base + i * cols;
-    const double *prev = old_base + (i - 1) * cols;
-    const double *next = old_base + (i + 1) * cols;
-    double *new_cell = new_base + i * cols;
+
+    // const double *curr = old_base + i * cols;
+    // const double *prev = old_base + (i - 1) * cols;
+    // const double *next = old_base + (i + 1) * cols;
+
     for (std::size_t j = 1; j < cols - 1; j++)
     {
       new_cell[j] = 0.5 * curr[j] + 0.125 * (curr[j + 1] + curr[j - 1] + prev[j] + next[j]);
     }
+
+    prev += cols;
+    next += cols;
+    curr += cols;
+    new_cell += cols;
   }
 
   for (std::size_t i = 0; i < rows; i++)
