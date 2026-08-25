@@ -122,8 +122,9 @@ void apply_stencil(const Grid &old_grid, Grid &new_grid)
   // const double *next = old_base + 2 * cols;
   // double *new_cell = new_base + cols;
 
-// #pragma omp parallel for schedule
-#pragma omp parallel for schedule(static)
+
+// #pragma omp parallel for schedule(static)
+#pragma omp parallel for
   for (std::size_t i = 1; i < rows - 1; i++)
   {
 
