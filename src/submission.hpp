@@ -87,6 +87,27 @@ public:
 //   }
 // }
 
+inline void process_row(const double *__restrict__ old_base,
+                        double *__restrict__ new_base,
+                        std::size_t i,
+                        std::size_t cols)
+{
+  const double *curr = old_base + i * cols;
+  const double *prev = old_base + (i - 1) * cols;
+  const double *next = old_base + (i + 1) * cols;
+  double *new_cell = new_base + i * cols;
+
+  for (std::size_t j = 1; j < cols - 1; j++)
+  {
+    new_cell[j] = 0.5 * curr[j] + 0.125 * (curr[j + 1] + curr[j - 1] + prev[j] + next[j]);
+  }
+
+  // prev += cols;
+  // next += cols;
+  // curr += cols;
+  // new_cell += cols;
+}
+
 void apply_stencil(const Grid &old_grid, Grid &new_grid)
 {
   // const double *old_base = old_grid.base();
@@ -101,24 +122,12 @@ void apply_stencil(const Grid &old_grid, Grid &new_grid)
   // const double *next = old_base + 2 * cols;
   // double *new_cell = new_base + cols;
 
-#pragma omp parallel for schedule(static)
+// #pragma omp parallel for schedule(static)
+#pragma omp parallel for
   for (std::size_t i = 1; i < rows - 1; i++)
   {
 
-    const double *curr = old_base + i * cols;
-    const double *prev = old_base + (i - 1) * cols;
-    const double *next = old_base + (i + 1) * cols;
-    double *new_cell = new_base + i * cols;
-
-    for (std::size_t j = 1; j < cols - 1; j++)
-    {
-      new_cell[j] = 0.5 * curr[j] + 0.125 * (curr[j + 1] + curr[j - 1] + prev[j] + next[j]);
-    }
-
-    // prev += cols;
-    // next += cols;
-    // curr += cols;
-    // new_cell += cols;
+    process_row(old_base, new_base, i, cols);
   }
 
   for (std::size_t i = 0; i < rows; i++)
