@@ -89,10 +89,10 @@ public:
 
 void apply_stencil(const Grid &old_grid, Grid &new_grid)
 {
-  // const double *old_base = old_grid.base();
-  // double *new_base = new_grid.base();
-  const double *__restrict__ old_base = old_grid.base();
-  double *__restrict__ new_base = new_grid.base();
+  const double *old_base = old_grid.base();
+  double *new_base = new_grid.base();
+  // const double *__restrict__ old_base = old_grid.base();
+  // double *__restrict__ new_base = new_grid.base();
   std::size_t rows = old_grid.rows();
   std::size_t cols = old_grid.cols();
 
