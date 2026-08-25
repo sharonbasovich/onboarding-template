@@ -89,10 +89,10 @@ public:
 
 void apply_stencil(const Grid &old_grid, Grid &new_grid)
 {
-  const double *old_base = old_grid.base();
-  double *new_base = new_grid.base();
-  // const double *__restrict__ old_base = old_grid.base();
-  // double *__restrict__ new_base = new_grid.base();
+  // const double *old_base = old_grid.base();
+  // double *new_base = new_grid.base();
+  const double *__restrict__ old_base = old_grid.base();
+  double *__restrict__ new_base = new_grid.base();
   std::size_t rows = old_grid.rows();
   std::size_t cols = old_grid.cols();
 
@@ -101,7 +101,7 @@ void apply_stencil(const Grid &old_grid, Grid &new_grid)
   // const double *next = old_base + 2 * cols;
   // double *new_cell = new_base + cols;
 
-#pragma omp parallel for
+#pragma omp parallel for schedule(static)
   for (std::size_t i = 1; i < rows - 1; i++)
   {
 
