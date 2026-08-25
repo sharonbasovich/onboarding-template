@@ -21,12 +21,12 @@ public:
 
   double &operator()(std::size_t i, std::size_t j)
   {
-    return data.at(i).at(j);
+    return data[i][j];
   }
 
   double operator()(std::size_t i, std::size_t j) const
   {
-    return data.at(i).at(j);
+    return data[i][j];
   }
 
   std::size_t rows() const
@@ -51,6 +51,13 @@ void apply_stencil(const Grid &old_grid, Grid &new_grid)
     for (std::size_t j = 1; j < cols - 1; j++)
     {
       new_grid(i, j) = 0.5 * old_grid(i, j) + 0.125 * (old_grid(i - 1, j) + old_grid(i, j - 1) + old_grid(i + 1, j) + old_grid(i, j + 1));
+      
+      // potential scatter strategy to look at later
+      // new_grid(i, j) += old_grid(i, j) * 0.5;
+      // new_grid(i, j + 1) += old_grid(i, j) * 0.125;
+      // new_grid(i, j - 1) += old_grid(i, j) * 0.125;
+      // new_grid(i + 1, j) += old_grid(i, j) * 0.125;
+      // new_grid(i - 1, j) += old_grid(i, j) * 0.125;
     }
   }
 
