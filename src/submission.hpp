@@ -3,9 +3,10 @@
 #include <cstddef>
 #include <vector>
 #include <thread>
-#include <mutex>
-#include <condition_variable>
+// #include <mutex>
+// #include <condition_variable>
 #include <atomic>
+#include <immintrin.h>
 
 // Starter Grid for the 2D heat-diffusion problem.
 //
@@ -44,12 +45,12 @@ private:
   std::size_t rows_ = 0;
   std::size_t cols_ = 0;
 
-  std::mutex mutex_;
-  std::condition_variable cv_;
-  std::size_t gen_ = 0;
-  bool stop_ = false;
+  // std::mutex mutex_;
+  // std::condition_variable cv_;
+  std::atomic<std::size_t> gen_{0};
+  std::atomic<bool> stop_{false};
 
-  std::condition_variable done_cv_;
+  // std::condition_variable done_cv_;
   std::atomic<std::size_t> completed_{0};
 
   void worker_loop(std::size_t worker_id)
@@ -58,24 +59,43 @@ private:
 
     while (true)
     {
-      std::unique_lock<std::mutex> lock(mutex_);
-
-      cv_.wait(lock, [&]
-               { return stop_ || gen_ != seen_gen; });
-
-      if (stop_)
+      // spin waiting
+      std::size_t current_gen;
+      while (true)
       {
-        return;
+        if (stop_.load(std::memory_order_acquire))
+        {
+          return;
+        }
+
+        current_gen = gen_.load(std::memory_order_acquire);
+
+        if (current_gen != seen_gen)
+        {
+          break;
+        }
+
+        _mm_pause();
       }
+
+      // std::unique_lock<std::mutex> lock(mutex_);
+
+      // cv_.wait(lock, [&]
+      //          { return stop_ || gen_ != seen_gen; });
+
+      // if (stop_)
+      // {
+      //   return;
+      // }
 
       const double *old_base = old_base_;
       double *new_base = new_base_;
       const std::size_t rows = rows_;
       const std::size_t cols = cols_;
 
-      seen_gen = gen_;
+      seen_gen = current_gen;
 
-      lock.unlock();
+      // lock.unlock();
 
       // rows - 2 is interior rows, worker_count_ + 1 since main thread also calculates chunk
       const std::size_t begin_row = 1 + (rows - 2) * worker_id / (worker_count_ + 1);
@@ -83,41 +103,43 @@ private:
 
       process_rows(old_base, new_base, begin_row, end_row, cols);
 
-      {
-        // std::lock_guard<std::mutex> lock(mutex_);
+      // {
+      // std::lock_guard<std::mutex> lock(mutex_);
 
-        // ++completed_;
+      // ++completed_;
 
-        // if (completed_ == worker_count_)
-        // {
-        //   done_cv_.notify_one();
-        // }
+      // if (completed_ == worker_count_)
+      // {
+      //   done_cv_.notify_one();
+      // }
 
-        const std::size_t finished = completed_.fetch_add(1) + 1;
+      // const std::size_t finished = completed_.fetch_add(1) + 1;
 
-        if (finished == worker_count_)
-        {
-          std::lock_guard<std::mutex> lock(mutex_);
-          done_cv_.notify_one();
-        }
-      }
+      completed_.fetch_add(1, std::memory_order_acq_rel);
+
+      // if (finished == worker_count_)
+      // {
+      //   std::lock_guard<std::mutex> lock(mutex_);
+      //   done_cv_.notify_one();
+      // }
+      // }
     }
   }
 
 public:
   ThreadPool()
   {
-    unsigned int hardware_threads = std::thread::hardware_concurrency();
+    // unsigned int hardware_threads = std::thread::hardware_concurrency();
 
-    if (hardware_threads == 0)
-    {
-      hardware_threads = 1;
-    }
+    // if (hardware_threads == 0)
+    // {
+    //   hardware_threads = 1;
+    // }
 
-    worker_count_ = hardware_threads > 1 ? hardware_threads - 1 : 0;
+    // worker_count_ = hardware_threads > 1 ? hardware_threads - 1 : 0;
 
     // TESTING ONLY
-    worker_count_ = 15;
+    worker_count_ = 7;
 
     workers_.reserve(worker_count_);
 
@@ -130,12 +152,15 @@ public:
 
   ~ThreadPool()
   {
-    {
-      std::lock_guard<std::mutex> lock(mutex_);
-      stop_ = true;
-    }
 
-    cv_.notify_all();
+    stop_.store(true, std::memory_order_release);
+
+    // {
+    //   std::lock_guard<std::mutex> lock(mutex_);
+    //   stop_ = true;
+    // }
+
+    // cv_.notify_all();
 
     for (std::thread &worker : workers_)
     {
@@ -161,7 +186,7 @@ public:
       return;
     }
     {
-      std::lock_guard<std::mutex> lock(mutex_);
+      // std::lock_guard<std::mutex> lock(mutex_);
 
       old_base_ = old_base;
       new_base_ = new_base;
@@ -169,26 +194,31 @@ public:
       cols_ = cols;
 
       // completed_ = 0;
-      completed_.store(0);
+      completed_.store(0, std::memory_order_relaxed);
 
-      ++gen_;
+      // ++gen_;
+      gen_.fetch_add(1, std::memory_order_release);
     }
 
-    cv_.notify_all();
+    // cv_.notify_all();
 
     // rows - 2 is interior rows, worker_count_ + 1 since main thread also calculates chunk
-    std::size_t begin_row = 1 + (rows - 2) * worker_count_ / (worker_count_ + 1);
+    const std::size_t begin_row = 1 + (rows - 2) * worker_count_ / (worker_count_ + 1);
 
-    std::size_t end_row = rows - 1;
+    const std::size_t end_row = rows - 1;
 
     process_rows(old_base, new_base, begin_row, end_row, cols);
 
-    std::unique_lock<std::mutex> lock(mutex_);
+    // std::unique_lock<std::mutex> lock(mutex_);
 
-    done_cv_.wait(lock, [&]
-                  { 
+    /* done_cv_.wait(lock, [&]
+                  {
                     // return completed_ == worker_count_;
-                  return completed_.load() == worker_count_; });
+                  return completed_.load() == worker_count_; }); */
+    while (completed_.load(std::memory_order_acquire) != worker_count_)
+    {
+      _mm_pause();
+    }
   }
 };
 
