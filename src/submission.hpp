@@ -70,16 +70,16 @@ private:
 
       const double *old_base = old_base_;
       double *new_base = new_base_;
-      std::size_t rows = rows_;
-      std::size_t cols = cols_;
+      const std::size_t rows = rows_;
+      const std::size_t cols = cols_;
 
       seen_gen = gen_;
 
       lock.unlock();
 
       // rows - 2 is interior rows, worker_count_ + 1 since main thread also calculates chunk
-      std::size_t begin_row = 1 + (rows - 2) * worker_id / (worker_count_ + 1);
-      std::size_t end_row = 1 + (rows - 2) * (worker_id + 1) / (worker_count_ + 1);
+      const std::size_t begin_row = 1 + (rows - 2) * worker_id / (worker_count_ + 1);
+      const std::size_t end_row = 1 + (rows - 2) * (worker_id + 1) / (worker_count_ + 1);
 
       process_rows(old_base, new_base, begin_row, end_row, cols);
 
@@ -97,6 +97,7 @@ private:
 
         if (finished == worker_count_)
         {
+          std::lock_guard<std::mutex> lock(mutex_);
           done_cv_.notify_one();
         }
       }
@@ -250,8 +251,8 @@ void apply_stencil(const Grid &old_grid, Grid &new_grid)
   // double *new_base = new_grid.base();
   const double *__restrict__ old_base = old_grid.base();
   double *__restrict__ new_base = new_grid.base();
-  std::size_t rows = old_grid.rows();
-  std::size_t cols = old_grid.cols();
+  const std::size_t rows = old_grid.rows();
+  const std::size_t cols = old_grid.cols();
 
   // handle small grids where all cells are boundary
   if (rows < 3 || cols < 3)
