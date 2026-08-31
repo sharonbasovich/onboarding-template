@@ -129,16 +129,6 @@ private:
 public:
   ThreadPool()
   {
-    // unsigned int hardware_threads = std::thread::hardware_concurrency();
-
-    // if (hardware_threads == 0)
-    // {
-    //   hardware_threads = 1;
-    // }
-
-    // worker_count_ = hardware_threads > 1 ? hardware_threads - 1 : 0;
-
-    // TESTING ONLY
     worker_count_ = 3;
 
     workers_.reserve(worker_count_);
