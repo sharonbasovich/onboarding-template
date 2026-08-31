@@ -139,7 +139,7 @@ public:
     // worker_count_ = hardware_threads > 1 ? hardware_threads - 1 : 0;
 
     // TESTING ONLY
-    worker_count_ = 2;
+    worker_count_ = 3;
 
     workers_.reserve(worker_count_);
 
