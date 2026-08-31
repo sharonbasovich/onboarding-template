@@ -239,6 +239,20 @@ void apply_stencil(const Grid &old_grid, Grid &new_grid)
   std::size_t rows = old_grid.rows();
   std::size_t cols = old_grid.cols();
 
+  // handle small grids where all cells are boundary
+  if (rows < 3 || cols < 3)
+  {
+    for (std::size_t i = 0; i < rows; ++i)
+    {
+      for (std::size_t j = 0; j < cols; ++j)
+      {
+        new_grid(i, j) = old_grid(i, j);
+      }
+    }
+
+    return;
+  }
+
   // const double *curr = old_base + cols;
   // const double *prev = old_base;
   // const double *next = old_base + 2 * cols;
