@@ -53,6 +53,8 @@ private:
   // std::condition_variable done_cv_;
   std::atomic<std::size_t> completed_{0};
 
+  static constexpr std::size_t main_percent_ = 25;
+
   void worker_loop(std::size_t worker_id)
   {
     std::size_t seen_gen = 0;
@@ -97,9 +99,15 @@ private:
 
       // lock.unlock();
 
+      const std::size_t interior_rows = rows - 2;
+
+      const std::size_t main_rows = interior_rows * main_percent_ / 100;
+
+      const std::size_t worker_rows = interior_rows - main_rows;
+
       // rows - 2 is interior rows, worker_count_ + 1 since main thread also calculates chunk
-      const std::size_t begin_row = 1 + (rows - 2) * worker_id / (worker_count_ + 1);
-      const std::size_t end_row = 1 + (rows - 2) * (worker_id + 1) / (worker_count_ + 1);
+      const std::size_t begin_row = 1 + worker_rows * worker_id / (worker_count_);
+      const std::size_t end_row = 1 + worker_rows * (worker_id + 1) / (worker_count_);
 
       process_rows(old_base, new_base, begin_row, end_row, cols);
 
@@ -193,7 +201,15 @@ public:
     // cv_.notify_all();
 
     // rows - 2 is interior rows, worker_count_ + 1 since main thread also calculates chunk
-    const std::size_t begin_row = 1 + (rows - 2) * worker_count_ / (worker_count_ + 1);
+    // const std::size_t begin_row = 1 + (rows - 2) * worker_count_ / (worker_count_ + 1);
+
+    const std::size_t interior_rows = rows - 2;
+
+    const std::size_t main_rows = interior_rows * main_percent_ / 100;
+
+    const std::size_t worker_rows = interior_rows - main_rows;
+
+    const std::size_t begin_row = worker_rows + 1;
 
     const std::size_t end_row = rows - 1;
 
