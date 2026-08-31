@@ -5,6 +5,7 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
+#include <atomic>
 
 // Starter Grid for the 2D heat-diffusion problem.
 //
@@ -49,7 +50,7 @@ private:
   bool stop_ = false;
 
   std::condition_variable done_cv_;
-  std::size_t completed_ = 0;
+  std::atomic<std::size_t> completed_{0};
 
   void worker_loop(std::size_t worker_id)
   {
@@ -83,11 +84,18 @@ private:
       process_rows(old_base, new_base, begin_row, end_row, cols);
 
       {
-        std::lock_guard<std::mutex> lock(mutex_);
+        // std::lock_guard<std::mutex> lock(mutex_);
 
-        ++completed_;
+        // ++completed_;
 
-        if (completed_ == worker_count_)
+        // if (completed_ == worker_count_)
+        // {
+        //   done_cv_.notify_one();
+        // }
+
+        const std::size_t finished = completed_.fetch_add(1) + 1;
+
+        if (finished == worker_count_)
         {
           done_cv_.notify_one();
         }
@@ -107,7 +115,7 @@ public:
 
     worker_count_ = hardware_threads > 1 ? hardware_threads - 1 : 0;
 
-    //TESTING ONLY
+    // TESTING ONLY
     worker_count_ = 7;
 
     workers_.reserve(worker_count_);
@@ -159,7 +167,8 @@ public:
       rows_ = rows;
       cols_ = cols;
 
-      completed_ = 0;
+      // completed_ = 0;
+      completed_.store(0);
 
       ++gen_;
     }
@@ -176,7 +185,9 @@ public:
     std::unique_lock<std::mutex> lock(mutex_);
 
     done_cv_.wait(lock, [&]
-                  { return completed_ == worker_count_; });
+                  { 
+                    // return completed_ == worker_count_;
+                  return completed_.load() == worker_count_; });
   }
 };
 
