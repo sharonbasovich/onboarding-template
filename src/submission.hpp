@@ -53,7 +53,7 @@ private:
   // std::condition_variable done_cv_;
   std::atomic<std::size_t> completed_{0};
 
-  static constexpr std::size_t main_percent_ = 25;
+  static constexpr std::size_t main_percent_ = 20;
 
   void worker_loop(std::size_t worker_id)
   {
