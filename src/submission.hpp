@@ -59,7 +59,7 @@ private:
   // std::condition_variable done_cv_;
   alignas(64) std::atomic<std::size_t> completed_{0};
 
-  static constexpr std::size_t main_percent_ = 35;
+  static constexpr std::size_t main_percent_ = 25;
 
   void worker_loop(std::size_t worker_id)
   {
