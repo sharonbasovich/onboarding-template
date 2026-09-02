@@ -8,6 +8,8 @@
 #include <atomic>
 #include <immintrin.h>
 
+#include <cstring>
+
 // Starter Grid for the 2D heat-diffusion problem.
 //
 // The evaluation harness uses operator() to set initial conditions and to read
@@ -25,6 +27,10 @@ inline void process_rows(const double *__restrict__ old_base,
     const double *prev = old_base + (i - 1) * cols;
     const double *next = old_base + (i + 1) * cols;
     double *new_cell = new_base + i * cols;
+
+    // copy boundary cells for row
+    new_cell[0] = curr[0];
+    new_cell[cols - 1] = curr[cols - 1];
 
     for (std::size_t j = 1; j < cols - 1; ++j)
     {
@@ -215,6 +221,7 @@ public:
 
     process_rows(old_base, new_base, begin_row, end_row, cols);
 
+    std::memcpy(new_base, old_base, cols * sizeof(double));
     // std::unique_lock<std::mutex> lock(mutex_);
 
     /* done_cv_.wait(lock, [&]
@@ -322,15 +329,15 @@ void apply_stencil(const Grid &old_grid, Grid &new_grid)
 
   get_thread_pool().run(old_base, new_base, rows, cols);
 
-  for (std::size_t i = 0; i < rows; ++i)
-  {
-    new_grid(i, 0) = old_grid(i, 0);
-    new_grid(i, cols - 1) = old_grid(i, cols - 1);
-  }
+  // for (std::size_t i = 0; i < rows; ++i)
+  // {
+  //   new_grid(i, 0) = old_grid(i, 0);
+  //   new_grid(i, cols - 1) = old_grid(i, cols - 1);
+  // }
 
-  for (std::size_t i = 0; i < cols; ++i)
-  {
-    new_grid(0, i) = old_grid(0, i);
-    new_grid(rows - 1, i) = old_grid(rows - 1, i);
-  }
+  // for (std::size_t i = 0; i < cols; ++i)
+  // {
+  //   new_grid(0, i) = old_grid(0, i);
+  //   new_grid(rows - 1, i) = old_grid(rows - 1, i);
+  // }
 }
