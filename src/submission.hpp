@@ -222,6 +222,8 @@ public:
     process_rows(old_base, new_base, begin_row, end_row, cols);
 
     std::memcpy(new_base, old_base, cols * sizeof(double));
+
+    std::memcpy(new_base + (rows - 1) * cols, old_base + (rows - 1) * cols, cols * sizeof(double));
     // std::unique_lock<std::mutex> lock(mutex_);
 
     /* done_cv_.wait(lock, [&]
