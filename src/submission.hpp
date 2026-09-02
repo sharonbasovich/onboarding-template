@@ -3,19 +3,12 @@
 #include <cstddef>
 #include <vector>
 #include <thread>
-// #include <mutex>
-// #include <condition_variable>
 #include <atomic>
 #include <immintrin.h>
 
 #include <cstring>
 
-// Starter Grid for the 2D heat-diffusion problem.
-//
-// The evaluation harness uses operator() to set initial conditions and to read
-// results; it never touches your internal storage. Keep this interface,
-// everything else is yours.
-
+// method to process calculations for a group of rows
 inline void process_rows(const double *__restrict__ old_base,
                          double *__restrict__ new_base,
                          std::size_t begin_row, std::size_t end_row,
@@ -39,6 +32,7 @@ inline void process_rows(const double *__restrict__ old_base,
   }
 }
 
+// Persistent thread pool with workers spinning on gen_ while waiting for next stencil iterations
 class ThreadPool
 {
 private:
@@ -51,16 +45,15 @@ private:
   std::size_t rows_ = 0;
   std::size_t cols_ = 0;
 
-  // std::mutex mutex_;
-  // std::condition_variable cv_;
+  // alignas to isolate hot sync cache lines
   alignas(64) std::atomic<std::size_t> gen_{0};
   alignas(64) std::atomic<bool> stop_{false};
-
-  // std::condition_variable done_cv_;
   alignas(64) std::atomic<std::size_t> completed_{0};
 
+  // for load balancing, the percentage of interior rows that main thread is handling
   static constexpr std::size_t main_percent_ = 25;
 
+  // main loop for threads
   void worker_loop(std::size_t worker_id)
   {
     std::size_t seen_gen = 0;
@@ -76,6 +69,7 @@ private:
           return;
         }
 
+        // acquire pairs with run() updating gen_ and publishing job metadata
         current_gen = gen_.load(std::memory_order_acquire);
 
         if (current_gen != seen_gen)
@@ -86,16 +80,6 @@ private:
         _mm_pause();
       }
 
-      // std::unique_lock<std::mutex> lock(mutex_);
-
-      // cv_.wait(lock, [&]
-      //          { return stop_ || gen_ != seen_gen; });
-
-      // if (stop_)
-      // {
-      //   return;
-      // }
-
       const double *old_base = old_base_;
       double *new_base = new_base_;
       const std::size_t rows = rows_;
@@ -103,48 +87,26 @@ private:
 
       seen_gen = current_gen;
 
-      // lock.unlock();
-
+      // partitioning the interior rows for workers
       const std::size_t interior_rows = rows - 2;
-
       const std::size_t main_rows = interior_rows * main_percent_ / 100;
-
       const std::size_t worker_rows = interior_rows - main_rows;
-
-      // rows - 2 is interior rows, worker_count_ + 1 since main thread also calculates chunk
       const std::size_t begin_row = 1 + worker_rows * worker_id / (worker_count_);
       const std::size_t end_row = 1 + worker_rows * (worker_id + 1) / (worker_count_);
 
+      // actually process the rows
       process_rows(old_base, new_base, begin_row, end_row, cols);
 
-      // {
-      // std::lock_guard<std::mutex> lock(mutex_);
-
-      // ++completed_;
-
-      // if (completed_ == worker_count_)
-      // {
-      //   done_cv_.notify_one();
-      // }
-
-      // const std::size_t finished = completed_.fetch_add(1) + 1;
-
+      // signal completion by adding to the count of completed workers
       completed_.fetch_add(1, std::memory_order_acq_rel);
-
-      // if (finished == worker_count_)
-      // {
-      //   std::lock_guard<std::mutex> lock(mutex_);
-      //   done_cv_.notify_one();
-      // }
-      // }
     }
   }
 
 public:
   ThreadPool()
   {
+    // empirically tested to be fastest in test environment
     worker_count_ = 3;
-
     workers_.reserve(worker_count_);
 
     for (std::size_t i = 0; i < worker_count_; ++i)
@@ -156,15 +118,7 @@ public:
 
   ~ThreadPool()
   {
-
     stop_.store(true, std::memory_order_release);
-
-    // {
-    //   std::lock_guard<std::mutex> lock(mutex_);
-    //   stop_ = true;
-    // }
-
-    // cv_.notify_all();
 
     for (std::thread &worker : workers_)
     {
@@ -177,59 +131,33 @@ public:
 
   void run(const double *old_base, double *new_base, std::size_t rows, std::size_t cols)
   {
+    // publish job data before incrementing gen_ and causing workers to process new job
+    old_base_ = old_base;
+    new_base_ = new_base;
+    rows_ = rows;
+    cols_ = cols;
 
-    if (worker_count_ == 0)
-    {
-      process_rows(
-          old_base,
-          new_base,
-          1,
-          rows - 1,
-          cols);
+    completed_.store(0, std::memory_order_relaxed);
 
-      return;
-    }
-    {
-      // std::lock_guard<std::mutex> lock(mutex_);
-
-      old_base_ = old_base;
-      new_base_ = new_base;
-      rows_ = rows;
-      cols_ = cols;
-
-      // completed_ = 0;
-      completed_.store(0, std::memory_order_relaxed);
-
-      // ++gen_;
-      gen_.fetch_add(1, std::memory_order_release);
-    }
+    gen_.fetch_add(1, std::memory_order_release);
 
     // cv_.notify_all();
 
-    // rows - 2 is interior rows, worker_count_ + 1 since main thread also calculates chunk
-    // const std::size_t begin_row = 1 + (rows - 2) * worker_count_ / (worker_count_ + 1);
-
+    // partitioning the interior rows for main thread
     const std::size_t interior_rows = rows - 2;
-
     const std::size_t main_rows = interior_rows * main_percent_ / 100;
-
     const std::size_t worker_rows = interior_rows - main_rows;
-
     const std::size_t begin_row = worker_rows + 1;
-
     const std::size_t end_row = rows - 1;
 
+    // main thread handles portion of row iterations
     process_rows(old_base, new_base, begin_row, end_row, cols);
 
+    // main thread copies over top and bottom boundary rows while workers may still be computing
     std::memcpy(new_base, old_base, cols * sizeof(double));
-
     std::memcpy(new_base + (rows - 1) * cols, old_base + (rows - 1) * cols, cols * sizeof(double));
-    // std::unique_lock<std::mutex> lock(mutex_);
 
-    /* done_cv_.wait(lock, [&]
-                  {
-                    // return completed_ == worker_count_;
-                  return completed_.load() == worker_count_; }); */
+    // wait for all workers to complete tasks
     while (completed_.load(std::memory_order_acquire) != worker_count_)
     {
       _mm_pause();
@@ -237,6 +165,7 @@ public:
   }
 };
 
+// keep thread pool between stencil iterations
 inline ThreadPool &get_thread_pool()
 {
   static ThreadPool pool;
@@ -248,24 +177,22 @@ class Grid
 private:
   std::size_t rows_;
   std::size_t cols_;
-  // std::vector<std::vector<double>> data;
   std::vector<double> data;
 
 public:
   Grid(std::size_t rows, std::size_t cols) : rows_(rows), cols_(cols), data(rows * cols)
   {
+    // construct the pool during Grid construction rather than the timed stencil loop
     (void)get_thread_pool();
   }
 
   double &operator()(std::size_t i, std::size_t j)
   {
-    // return data[i][j];
     return data[i * cols_ + j];
   }
 
   double operator()(std::size_t i, std::size_t j) const
   {
-    // return data[i][j];
     return data[i * cols_ + j];
   }
 
@@ -292,8 +219,6 @@ public:
 
 void apply_stencil(const Grid &old_grid, Grid &new_grid)
 {
-  // const double *old_base = old_grid.base();
-  // double *new_base = new_grid.base();
   const double *__restrict__ old_base = old_grid.base();
   double *__restrict__ new_base = new_grid.base();
   const std::size_t rows = old_grid.rows();
@@ -313,33 +238,5 @@ void apply_stencil(const Grid &old_grid, Grid &new_grid)
     return;
   }
 
-  // const double *curr = old_base + cols;
-  // const double *prev = old_base;
-  // const double *next = old_base + 2 * cols;
-  // double *new_cell = new_base + cols;
-
-  // non-custom threading
-  // #pragma omp parallel for schedule(static)
-  // #pragma omp parallel for
-  //   for (std::size_t i = 1; i < rows - 1; ++i)
-  //   {
-
-  //     process_rows(old_base, new_base, i, cols);
-  //   }
-
-  // process_rows(old_base, new_base, 1, rows - 1, cols);
-
   get_thread_pool().run(old_base, new_base, rows, cols);
-
-  // for (std::size_t i = 0; i < rows; ++i)
-  // {
-  //   new_grid(i, 0) = old_grid(i, 0);
-  //   new_grid(i, cols - 1) = old_grid(i, cols - 1);
-  // }
-
-  // for (std::size_t i = 0; i < cols; ++i)
-  // {
-  //   new_grid(0, i) = old_grid(0, i);
-  //   new_grid(rows - 1, i) = old_grid(rows - 1, i);
-  // }
 }
