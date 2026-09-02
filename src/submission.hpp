@@ -47,11 +47,11 @@ private:
 
   // std::mutex mutex_;
   // std::condition_variable cv_;
-  std::atomic<std::size_t> gen_{0};
-  std::atomic<bool> stop_{false};
+  alignas(64) std::atomic<std::size_t> gen_{0};
+  alignas(64) std::atomic<bool> stop_{false};
 
   // std::condition_variable done_cv_;
-  std::atomic<std::size_t> completed_{0};
+  alignas(64) std::atomic<std::size_t> completed_{0};
 
   static constexpr std::size_t main_percent_ = 35;
 
